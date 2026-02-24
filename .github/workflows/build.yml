@@ -1,0 +1,12 @@
+name: 🏗️ Build Godot (branch 66)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: ./.github/workflows/build_reusable.yml
+    with:
+      godot_ref: "66"
+      build_name: "public_ggml"
+    secrets: inherit
