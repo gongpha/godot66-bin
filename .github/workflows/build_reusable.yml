@@ -191,7 +191,6 @@ jobs:
 
   # ========== Linux ==========
   linux:
-    needs: windows
     runs-on: ubuntu-22.04
     name: 🐧 ${{ matrix.name }}
     timeout-minutes: 240
