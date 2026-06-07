@@ -1,4 +1,4 @@
-name: Build Godot (branch 66)
+name: Build Godot (branch 66) + GGML (experimental)
 
 on:
   workflow_dispatch:
@@ -8,5 +8,6 @@ jobs:
     uses: ./.github/workflows/build_reusable.yml
     with:
       godot_ref: "66"
-      build_name: "public"
+      build_name: "public_ggml"
+      include_ggml: true
     secrets: inherit
