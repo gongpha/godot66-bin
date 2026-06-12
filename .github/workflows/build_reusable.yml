@@ -183,10 +183,10 @@ jobs:
 
       - name: Prepare artifact
         run: |
-          Remove-Item godot/bin/* -Include *.exp,*.lib,*.pdb -Force
-          Remove-Item godot/bin/obj -Recurse -Force
-          Remove-Item godot/bin/gen -Recurse -Force
-          Remove-Item godot/bin/vulkan-shaders-gen.exe -Force
+          Remove-Item godot/bin/* -Include *.exp,*.lib,*.pdb -Force -ErrorAction SilentlyContinue
+          Remove-Item godot/bin/obj -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item godot/bin/gen -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item godot/bin/vulkan-shaders-gen.exe -Force -ErrorAction SilentlyContinue
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
