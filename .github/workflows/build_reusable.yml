@@ -98,11 +98,11 @@ jobs:
       - name: Clone module - godotsteam (fork)
         run: git clone https://github.com/gongpha/godotsteam.git modules/godotsteam
 
-      - name: Clone SteamworksSDK (v1.63)
+      - name: Clone SteamworksSDK (v1.65a)
         uses: actions/checkout@v6
         with:
           repository: rlabrecque/SteamworksSDK
-          ref: 494c2d680b9e47bbc369496b57568f44ef2f6796 # v1.63
+          ref: df2baabf574a738ef1ea90a7e89339107fc0a279 # v1.65 (a)
           path: modules/godotsteam/sdk
 
       - name: Restore Godot build cache
@@ -267,11 +267,11 @@ jobs:
       - name: Clone module - godotsteam (fork)
         run: git clone https://github.com/gongpha/godotsteam.git modules/godotsteam
 
-      - name: Clone SteamworksSDK (v1.63)
+      - name: Clone SteamworksSDK (v1.65a)
         uses: actions/checkout@v6
         with:
           repository: rlabrecque/SteamworksSDK
-          ref: 494c2d680b9e47bbc369496b57568f44ef2f6796 # v1.63
+          ref: df2baabf574a738ef1ea90a7e89339107fc0a279 # v1.65 (a)
           path: modules/godotsteam/sdk
 
       - name: Setup dependencies
