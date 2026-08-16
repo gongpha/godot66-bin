@@ -68,6 +68,13 @@ jobs:
           token: ${{ secrets.MODULE_TOKEN }}
           path: modules/66
 
+      - name: Clone module - midi
+        uses: actions/checkout@v7
+        with:
+          repository: gongpha/godot-midi
+          submodules: recursive
+          path: modules/midi
+
       - name: Clone module - sanctuary (private)
         uses: actions/checkout@v7
         with:
@@ -253,6 +260,13 @@ jobs:
           repository: gongpha/godot66-module-private
           token: ${{ secrets.MODULE_TOKEN }}
           path: modules/66
+
+      - name: Clone module - midi
+        uses: actions/checkout@v7
+        with:
+          repository: gongpha/godot-midi
+          submodules: recursive
+          path: modules/midi
 
       - name: Clone module - sanctuary (private)
         uses: actions/checkout@v7
