@@ -34,6 +34,9 @@ jobs:
     runs-on: windows-latest
     name: 🪟 ${{ matrix.name }}
     timeout-minutes: 240
+    env:
+      SCONS_CACHE_MSVC_CONFIG: true
+      PYTHONIOENCODING: utf8
     strategy:
       fail-fast: false
       matrix:
@@ -52,28 +55,28 @@ jobs:
 
     steps:
       - name: Clone Godot (66)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.GODOT_REPO }}
           ref: ${{ env.GODOT_REF }}
           path: godot
 
       - name: Clone module - 66 (private)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: gongpha/godot66-module-private
           token: ${{ secrets.MODULE_TOKEN }}
           path: modules/66
 
       - name: Clone module - sanctuary (private)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: gongpha/godot66-sanctuary
           token: ${{ secrets.MODULE_TOKEN }}
           path: modules/sanctuary
 
       - name: Clone module - Steam Audio (private)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: gongpha/godot66-steam-audio
           token: ${{ secrets.MODULE_TOKEN }}
@@ -81,7 +84,7 @@ jobs:
 
       - name: Clone module - llama
         if: ${{ inputs.include_ggml }}
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: gongpha/godot-module-llama-cpp
           submodules: recursive
@@ -89,7 +92,7 @@ jobs:
 
       - name: Clone module - whisper
         if: ${{ inputs.include_ggml }}
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: gongpha/godot-whisper-cpp
           submodules: recursive
@@ -99,14 +102,14 @@ jobs:
         run: git clone https://github.com/gongpha/godotsteam.git modules/godotsteam
 
       - name: Clone SteamworksSDK (v1.65a)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: rlabrecque/SteamworksSDK
           ref: df2baabf574a738ef1ea90a7e89339107fc0a279 # v1.65 (a)
           path: modules/godotsteam/sdk
 
       - name: Restore Godot build cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.SCONS_CACHE }}
           key: ${{ matrix.cache-name }}|${{ github.ref_name }}|${{ github.sha }}
@@ -115,13 +118,25 @@ jobs:
             ${{ matrix.cache-name }}|
         continue-on-error: true
 
+      # Paired with the purge before the save below: anything the build did not touch is
+      # dropped, so the cache stops growing without bound and getting evicted wholesale.
+      - name: Store unix timestamp
+        shell: sh
+        run: echo "CACHE_TIMESTAMP=$(date +%s)" >> $GITHUB_ENV
+
       - name: Setup Python and SCons
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.x"
 
       - name: Install SCons
-        run: pip install scons
+        # Pinned to match godot's .github/actions/godot-deps. An unpinned SCons means a
+        # release build can break on somebody else's upload.
+        run: pip install scons==4.10.1
+
+      - name: Setup problem matchers
+        shell: bash
+        run: echo ::add-matcher::godot/misc/utility/problem-matchers.json
 
       - name: Fetch Steam Audio SDK
         run: python modules/phonon/scripts/fetch_steam_audio.py modules/phonon/steamaudio_lib/4.8.1/steamaudio/steamaudio
@@ -131,17 +146,17 @@ jobs:
         with:
           arch: x64
 
-      # - name: Download pre-built AccessKit
-      #   shell: sh
-      #   id: accesskit-sdk
-      #   working-directory: godot
-      #   run: |
-      #     if python ./misc/scripts/install_accesskit.py; then
-      #       echo "ACCESSKIT_ENABLED=yes" >> "$GITHUB_OUTPUT"
-      #     else
-      #       echo "::warning::AccessKit SDK installation failed, building without AccessKit support."
-      #       echo "ACCESSKIT_ENABLED=no" >> "$GITHUB_OUTPUT"
-      #     fi
+      - name: Download pre-built AccessKit
+        shell: sh
+        id: accesskit-sdk
+        working-directory: godot
+        run: |
+          if python ./misc/scripts/install_accesskit.py; then
+            echo "ACCESSKIT_ENABLED=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::AccessKit SDK installation failed, building without AccessKit support."
+            echo "ACCESSKIT_ENABLED=no" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Download Direct3D 12 SDK components
         id: d3d12-sdk
@@ -155,30 +170,34 @@ jobs:
             echo "D3D12_ENABLED=no" >> $env:GITHUB_OUTPUT
           }
 
-      - name: Download pre-built ANGLE static libraries
-        uses: dsaltares/fetch-gh-release-asset@1.1.2
-        with:
-          repo: godotengine/godot-angle-static
-          version: tags/chromium/6601.2
-          file: godot-angle-static-x86_64-msvc-release.zip
-          target: angle/angle.zip
-
-      - name: Extract pre-built ANGLE static libraries
-        run: Expand-Archive -Force angle/angle.zip ${{ github.workspace }}/
-
-      - name: Install Vulkan SDK
-        uses: humbletim/install-vulkan-sdk@v1.2
-        with:
-          version: 1.4.309.0
-          cache: true
+      # The engine owns the ANGLE version now (misc/scripts/install_angle.py). This used
+      # to fetch a hardcoded tags/chromium/6601.2 release asset by hand; upstream has since
+      # moved to chromium/7219 AND renamed the asset, so the hardcoded copy was pinning us
+      # to an ancient ANGLE at best.
+      - name: Download pre-built ANGLE
+        shell: sh
+        id: angle-sdk
+        working-directory: godot
+        run: |
+          if python ./misc/scripts/install_angle.py; then
+            echo "ANGLE_ENABLED=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::ANGLE installation failed, building without ANGLE support."
+            echo "ANGLE_ENABLED=no" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Compilation
         working-directory: godot
         run: |
-          scons platform=windows target=${{ matrix.target }} production=yes ${{ matrix.scons-flags }} d3d12=${{ steps.d3d12-sdk.outputs.D3D12_ENABLED }} "angle_libs=${{ github.workspace }}/" "custom_modules=${{ github.workspace }}/modules" "cache_path=${{ env.SCONS_CACHE }}" accesskit=no
+          scons platform=windows target=${{ matrix.target }} production=yes ${{ matrix.scons-flags }} d3d12=${{ steps.d3d12-sdk.outputs.D3D12_ENABLED }} angle=${{ steps.angle-sdk.outputs.ANGLE_ENABLED }} accesskit=${{ steps.accesskit-sdk.outputs.ACCESSKIT_ENABLED }} "custom_modules=${{ github.workspace }}/modules" "cache_path=${{ env.SCONS_CACHE }}" redirect_build_objects=no
+
+      - name: Purge cache files before timestamp
+        shell: sh
+        run: python godot/misc/scripts/purge_cache.py "$CACHE_TIMESTAMP" "${{ env.SCONS_CACHE }}"
+        continue-on-error: true
 
       - name: Save Godot build cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ env.SCONS_CACHE }}
           key: ${{ matrix.cache-name }}|${{ github.ref_name }}|${{ github.sha }}
@@ -187,12 +206,13 @@ jobs:
       - name: Prepare artifact
         run: |
           Remove-Item godot/bin/* -Include *.exp,*.lib,*.pdb -Force -ErrorAction SilentlyContinue
+          Remove-Item godot/bin/build_deps -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item godot/bin/obj -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item godot/bin/gen -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item godot/bin/vulkan-shaders-gen.exe -Force -ErrorAction SilentlyContinue
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.cache-name }}
           path: godot/bin/*
@@ -221,28 +241,28 @@ jobs:
 
     steps:
       - name: Clone Godot (66)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.GODOT_REPO }}
           ref: ${{ env.GODOT_REF }}
           path: godot
 
       - name: Clone module - 66 (private)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: gongpha/godot66-module-private
           token: ${{ secrets.MODULE_TOKEN }}
           path: modules/66
 
       - name: Clone module - sanctuary (private)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: gongpha/godot66-sanctuary
           token: ${{ secrets.MODULE_TOKEN }}
           path: modules/sanctuary
 
       - name: Clone module - Steam Audio (private)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: gongpha/godot66-steam-audio
           token: ${{ secrets.MODULE_TOKEN }}
@@ -250,7 +270,7 @@ jobs:
 
       - name: Clone module - llama
         if: ${{ inputs.include_ggml }}
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: gongpha/godot-module-llama-cpp
           submodules: recursive
@@ -258,7 +278,7 @@ jobs:
 
       - name: Clone module - whisper
         if: ${{ inputs.include_ggml }}
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: gongpha/godot-whisper-cpp
           submodules: recursive
@@ -268,7 +288,7 @@ jobs:
         run: git clone https://github.com/gongpha/godotsteam.git modules/godotsteam
 
       - name: Clone SteamworksSDK (v1.65a)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: rlabrecque/SteamworksSDK
           ref: df2baabf574a738ef1ea90a7e89339107fc0a279 # v1.65 (a)
@@ -286,7 +306,7 @@ jobs:
           echo "Disk usage after:" && df -h
 
       - name: Restore Godot build cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.SCONS_CACHE }}
           key: ${{ matrix.cache-name }}|${{ github.ref_name }}|${{ github.sha }}
@@ -295,42 +315,53 @@ jobs:
             ${{ matrix.cache-name }}|
         continue-on-error: true
 
+      # Paired with the purge before the save below: anything the build did not touch is
+      # dropped, so the cache stops growing without bound and getting evicted wholesale.
+      - name: Store unix timestamp
+        shell: sh
+        run: echo "CACHE_TIMESTAMP=$(date +%s)" >> $GITHUB_ENV
+
       - name: Setup Python and SCons
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.x"
 
       - name: Install SCons
-        run: pip install scons
+        # Pinned to match godot's .github/actions/godot-deps. An unpinned SCons means a
+        # release build can break on somebody else's upload.
+        run: pip install scons==4.10.1
+
+      - name: Setup problem matchers
+        shell: bash
+        run: echo ::add-matcher::godot/misc/utility/problem-matchers.json
 
       - name: Fetch Steam Audio SDK
         run: python modules/phonon/scripts/fetch_steam_audio.py modules/phonon/steamaudio_lib/4.8.1/steamaudio/steamaudio
 
-      # - name: Download pre-built AccessKit
-      #   shell: sh
-      #   id: accesskit-sdk
-      #   working-directory: godot
-      #   run: |
-      #     if python ./misc/scripts/install_accesskit.py; then
-      #       echo "ACCESSKIT_ENABLED=yes" >> "$GITHUB_OUTPUT"
-      #     else
-      #       echo "::warning::AccessKit SDK installation failed, building without AccessKit support."
-      #       echo "ACCESSKIT_ENABLED=no" >> "$GITHUB_OUTPUT"
-      #     fi
-
-      - name: Install Vulkan SDK
-        uses: humbletim/install-vulkan-sdk@v1.2
-        with:
-          version: 1.4.309.0
-          cache: true
+      - name: Download pre-built AccessKit
+        shell: sh
+        id: accesskit-sdk
+        working-directory: godot
+        run: |
+          if python ./misc/scripts/install_accesskit.py; then
+            echo "ACCESSKIT_ENABLED=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::AccessKit SDK installation failed, building without AccessKit support."
+            echo "ACCESSKIT_ENABLED=no" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Compilation
         working-directory: godot
         run: |
-          scons platform=linuxbsd target=${{ matrix.target }} production=yes ${{ matrix.scons-flags }} "custom_modules=${{ github.workspace }}/modules" "cache_path=${{ env.SCONS_CACHE }}" accesskit=no
+          scons platform=linuxbsd target=${{ matrix.target }} production=yes ${{ matrix.scons-flags }} accesskit=${{ steps.accesskit-sdk.outputs.ACCESSKIT_ENABLED }} "custom_modules=${{ github.workspace }}/modules" "cache_path=${{ env.SCONS_CACHE }}" redirect_build_objects=no
+
+      - name: Purge cache files before timestamp
+        shell: sh
+        run: python godot/misc/scripts/purge_cache.py "$CACHE_TIMESTAMP" "${{ env.SCONS_CACHE }}"
+        continue-on-error: true
 
       - name: Save Godot build cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ env.SCONS_CACHE }}
           key: ${{ matrix.cache-name }}|${{ github.ref_name }}|${{ github.sha }}
@@ -338,12 +369,12 @@ jobs:
 
       - name: Prepare artifact
         run: |
-          rm -rf godot/bin/obj godot/bin/gen godot/bin/vulkan-shaders-gen
+          rm -rf godot/bin/build_deps godot/bin/obj godot/bin/gen godot/bin/vulkan-shaders-gen
           strip godot/bin/godot66.*
           chmod +x godot/bin/godot66.*
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.cache-name }}
           path: godot/bin/*
