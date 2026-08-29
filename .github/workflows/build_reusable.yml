@@ -75,6 +75,14 @@ jobs:
           submodules: recursive
           path: modules/midi
 
+      - name: Clone module - lexbor (private)
+        uses: actions/checkout@v7
+        with:
+          repository: gongpha/godot-lexbor
+          submodules: recursive
+          token: ${{ secrets.MODULE_TOKEN }}
+          path: modules/lexbor
+
       - name: Clone module - sanctuary (private)
         uses: actions/checkout@v7
         with:
@@ -267,6 +275,14 @@ jobs:
           repository: gongpha/godot-midi
           submodules: recursive
           path: modules/midi
+
+      - name: Clone module - lexbor (private)
+        uses: actions/checkout@v7
+        with:
+          repository: gongpha/godot-lexbor
+          submodules: recursive
+          token: ${{ secrets.MODULE_TOKEN }}
+          path: modules/lexbor
 
       - name: Clone module - sanctuary (private)
         uses: actions/checkout@v7
