@@ -1,0 +1,14 @@
+name: Build Godot (branch 66) without Steam (release templates)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: ./.github/workflows/build_reusable.yml
+    with:
+      godot_ref: "66"
+      build_name: "public_nosteam"
+      include_steam: false
+      release_only: true
+    secrets: inherit
